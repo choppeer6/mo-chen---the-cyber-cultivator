@@ -19,22 +19,30 @@ export const useMoChen = () => {
   useEffect(() => {
     const savedAffinity = localStorage.getItem('mo_chen_affinity');
     const savedMessages = localStorage.getItem('mo_chen_messages');
-    const savedLanguage = localStorage.getItem('mo_chen_language') as Language;
+    const savedLanguage = localStorage.getItem('mo_chen_language') as Language | null;
+    const lang: Language = savedLanguage === 'zh' ? 'zh' : 'en';
 
     if (savedAffinity) setAffinity(parseInt(savedAffinity, 10));
-    if (savedLanguage && (savedLanguage === 'en' || savedLanguage === 'zh')) {
-      setLanguage(savedLanguage);
-    }
-    
+    if (savedLanguage === 'zh' || savedLanguage === 'en') setLanguage(savedLanguage);
+
     if (savedMessages) {
-      setMessages(JSON.parse(savedMessages));
+      try {
+        setMessages(JSON.parse(savedMessages));
+      } catch {
+        const initial: Message[] = INITIAL_MESSAGES[lang].map((text, idx) => ({
+          id: `init-${idx}`,
+          role: Role.MODEL,
+          text,
+          timestamp: Date.now() + idx * 1000,
+        }));
+        setMessages(initial);
+      }
     } else {
-      // Default to English messages initially unless user switches
-      const initial: Message[] = INITIAL_MESSAGES['en'].map((text, idx) => ({
+      const initial: Message[] = INITIAL_MESSAGES[lang].map((text, idx) => ({
         id: `init-${idx}`,
         role: Role.MODEL,
         text,
-        timestamp: Date.now() + idx * 1000
+        timestamp: Date.now() + idx * 1000,
       }));
       setMessages(initial);
     }
@@ -75,6 +83,8 @@ export const useMoChen = () => {
       increaseAffinity(2);
     } catch (error) {
       console.error(error);
+      const errMsg = language === 'zh' ? '虚空破碎，传音中断……请稍后重试。' : 'The void disrupts my voice... Please try again.';
+      addMessage(Role.MODEL, errMsg);
     } finally {
       setIsLoading(false);
       setTimeout(() => setIsSpeaking(false), 2000);
@@ -86,56 +96,68 @@ export const useMoChen = () => {
     addMessage(Role.USER, userText);
     setIsLoading(true);
 
-    try {
-        const reader = new FileReader();
-        reader.readAsDataURL(file);
-        reader.onload = async () => {
-            const base64Data = (reader.result as string).split(',')[1];
-            const analysis = await analyzeArtifact(file.type, base64Data, affinity, 'file', language);
-            addMessage(Role.MODEL, analysis, 'analysis_result');
-            increaseAffinity(5);
-            setIsLoading(false);
-        };
-    } catch (e) {
+    return new Promise<void>((resolve) => {
+      const reader = new FileReader();
+      reader.onload = async () => {
+        try {
+          const base64Data = (reader.result as string)?.split(',')[1];
+          if (!base64Data) throw new Error('Invalid file data');
+          const analysis = await analyzeArtifact(file.type, base64Data, affinity, 'file', language);
+          addMessage(Role.MODEL, analysis, 'analysis_result');
+          increaseAffinity(5);
+        } catch (e) {
+          addMessage(Role.MODEL, language === 'zh' ? '此法宝有禁制，本座无法窥探。' : 'This artifact bears seals I cannot pierce.', 'analysis_result');
+        } finally {
+          setIsLoading(false);
+          resolve();
+        }
+      };
+      reader.onerror = () => {
         setIsLoading(false);
-    }
+        addMessage(Role.MODEL, language === 'zh' ? '神识受阻，未能读取。' : 'My Divine Sense failed to read it.', 'analysis_result');
+        resolve();
+      };
+      reader.readAsDataURL(file);
+    });
   }, [affinity, language]);
 
   const captureScreen = useCallback(async () => {
-      try {
-          const stream = await navigator.mediaDevices.getDisplayMedia({ 
-              video: { width: 1280, height: 720 }, 
-              audio: false 
-          });
-          
-          const track = stream.getVideoTracks()[0];
-          const imageCapture = new ImageCapture(track);
-          const bitmap = await imageCapture.grabFrame();
-          
-          const canvas = document.createElement('canvas');
-          canvas.width = bitmap.width;
-          canvas.height = bitmap.height;
-          const ctx = canvas.getContext('2d');
-          if (!ctx) throw new Error("Canvas error");
-          
-          ctx.drawImage(bitmap, 0, 0);
-          const base64Url = canvas.toDataURL('image/jpeg', 0.8);
-          const base64Data = base64Url.split(',')[1];
-          
-          track.stop();
+    const userText = language === 'zh' ? '[开启神识扫视幻境]' : '[Invoked Divine Sense on Screen]';
+    addMessage(Role.USER, userText);
+    setIsLoading(true);
 
-          const userText = language === 'zh' ? "[开启神识扫视幻境]" : "[Invoked Divine Sense on Screen]";
-          addMessage(Role.USER, userText);
-          setIsLoading(true);
+    try {
+      const stream = await navigator.mediaDevices.getDisplayMedia({
+        video: { width: 1280, height: 720 },
+        audio: false,
+      });
 
-          const analysis = await analyzeArtifact('image/jpeg', base64Data, affinity, 'screen', language);
-          addMessage(Role.MODEL, analysis, 'analysis_result');
-          increaseAffinity(8); 
-      } catch (err) {
-          console.error("Screen capture failed:", err);
-      } finally {
-          setIsLoading(false);
-      }
+      const track = stream.getVideoTracks()[0];
+      const imageCapture = new ImageCapture(track);
+      const bitmap = await imageCapture.grabFrame();
+
+      const canvas = document.createElement('canvas');
+      canvas.width = bitmap.width;
+      canvas.height = bitmap.height;
+      const ctx = canvas.getContext('2d');
+      if (!ctx) throw new Error('Canvas error');
+
+      ctx.drawImage(bitmap, 0, 0);
+      const base64Url = canvas.toDataURL('image/jpeg', 0.8);
+      const base64Data = base64Url.split(',')[1];
+
+      track.stop();
+
+      const analysis = await analyzeArtifact('image/jpeg', base64Data!, affinity, 'screen', language);
+      addMessage(Role.MODEL, analysis, 'analysis_result');
+      increaseAffinity(8);
+    } catch (err) {
+      console.error('Screen capture failed:', err);
+      const errMsg = language === 'zh' ? '神识未获准许，未能窥探幻境。' : 'My Divine Sense was not granted permission.';
+      addMessage(Role.MODEL, errMsg, 'analysis_result');
+    } finally {
+      setIsLoading(false);
+    }
   }, [affinity, language]);
 
   return {
