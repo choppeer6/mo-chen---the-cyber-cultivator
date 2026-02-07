@@ -1,0 +1,4 @@
+# 墨尘仙君 - PyQt6 桌面版 / Mo Chen - PyQt6 Desktop Client
+PyQt6>=6.6.0
+python-dotenv>=1.0.0
+openai>=1.0.0

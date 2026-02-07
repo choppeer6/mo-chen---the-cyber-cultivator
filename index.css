@@ -1,0 +1,28 @@
+/* 墨尘仙君 - 赛博伴侣 / Mo Chen - The Cyber Cultivator */
+*, *::before, *::after {
+  box-sizing: border-box;
+}
+
+html, body, #root {
+  margin: 0;
+  padding: 0;
+  height: 100%;
+  width: 100%;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* 平滑滚动 */
+.scrollbar-hide {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+.scrollbar-hide::-webkit-scrollbar {
+  display: none;
+}
+
+/* 选中文字样式 */
+::selection {
+  background: rgba(0, 188, 212, 0.3);
+  color: inherit;
+}
